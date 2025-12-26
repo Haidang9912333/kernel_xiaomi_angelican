@@ -57,7 +57,7 @@ jobs:
           export CROSS_COMPILE_ARM32=$GCC32
           
           # Nạp config
-          make O=out defconfig
+          make O=out angelica_defconfig
           
           # Build trực tiếp Image.gz-dtb, bỏ qua lỗi dtbo_check
           make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=$GCC64 CROSS_COMPILE_ARM32=$GCC32 Image.gz-dtb
