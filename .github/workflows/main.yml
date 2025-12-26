@@ -1,4 +1,4 @@
-name: Build_Docker_Redmi9C_Final_U22
+name: Build_Docker_Redmi9C_U22_Fix_Path
 on:
   workflow_dispatch:
 
@@ -9,18 +9,20 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
-      - name: Install Build Tools
+      - name: Install Build Essentials
         run: |
           sudo apt-get update
           sudo apt-get install -y bc build-essential git libssl-dev python3 python3-pip
-          # Clone Toolchain chuẩn từ Google
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 --depth=1 gcc64
-          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 --depth=1 gcc32
+          # Clone Toolchain vào thư mục cụ thể
+          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9 --depth=1 $GITHUB_WORKSPACE/gcc64
+          git clone https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9 --depth=1 $GITHUB_WORKSPACE/gcc32
+          # Cấp quyền thực thi cho toàn bộ thư mục bin (Quan trọng)
+          chmod -R +x $GITHUB_WORKSPACE/gcc64/bin
+          chmod -R +x $GITHUB_WORKSPACE/gcc32/bin
 
-      - name: Inject Docker Config to defconfig
+      - name: Inject Docker Config
         run: |
-          CONF=arch/arm64/configs/defconfig
-          # Ghi đè cấu hình Docker (Sạch sẽ, không trùng lặp)
+          CONF=arch/arm64/configs/angelica_defconfig
           sed -i '/CONFIG_NAMESPACES/d' $CONF
           sed -i '/CONFIG_CGROUPS/d' $CONF
           cat <<EOF >> $CONF
@@ -44,26 +46,24 @@ jobs:
           CONFIG_IKCONFIG_PROC=y
           EOF
 
-      - name: Build Kernel Image
+      - name: Build Kernel
         run: |
-          # Thiết lập PATH tuyệt đối để không bị lỗi "command not found"
-          GCC64_DIR=$(pwd)/gcc64/bin
-          GCC32_DIR=$(pwd)/gcc32/bin
-          export PATH=$GCC64_DIR:$GCC32_DIR:$PATH
+          # Thiết lập PATH và các biến môi trường
+          export GCC64=$GITHUB_WORKSPACE/gcc64/bin/aarch64-linux-android-
+          export GCC32=$GITHUB_WORKSPACE/gcc32/bin/arm-linux-androideabi-
           
           export ARCH=arm64
-          export CROSS_COMPILE=aarch64-linux-android-
-          export CROSS_COMPILE_ARM32=arm-linux-androideabi-
+          export CROSS_COMPILE=$GCC64
+          export CROSS_COMPILE_ARM32=$GCC32
           
-          # 1. Tạo file cấu hình
+          # Nạp config
           make O=out defconfig
           
-          # 2. Build CHỈ file Image.gz-dtb để bỏ qua lỗi 'dtbo_check'
-          # Dùng thêm tham số DTC_EXT để tránh lỗi công cụ Device Tree cũ
-          make -j$(nproc --all) O=out Image.gz-dtb
+          # Build trực tiếp Image.gz-dtb, bỏ qua lỗi dtbo_check
+          make -j$(nproc --all) O=out ARCH=arm64 CROSS_COMPILE=$GCC64 CROSS_COMPILE_ARM32=$GCC32 Image.gz-dtb
 
-      - name: Upload Kernel Artifact
+      - name: Upload Output
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel_Docker_Angelica_Final
+          name: Kernel_Docker_Angelica_Final_Fix
           path: out/arch/arm64/boot/Image.gz-dtb
